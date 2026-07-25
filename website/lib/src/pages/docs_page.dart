@@ -1,0 +1,940 @@
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+
+import '../data/docs_sections.dart';
+import '../data/examples.dart';
+import '../data/snippets.dart';
+import '../theme/tokens.dart';
+import '../widgets/app_icon.dart';
+import '../widgets/code_block.dart';
+import '../widgets/docs_md_actions.dart';
+import '../widgets/footer.dart';
+import '../widgets/interactive_demos.dart';
+import '../widgets/nav_sheet.dart';
+import '../widgets/section.dart';
+import 'docs_content.dart';
+
+/// Height of the breadcrumb bar pinned under the nav on compact layouts, where
+/// the section rail collapses into a popup. Sections scroll behind it, so the
+/// scroll-spy and scroll-to math offset by both the nav and this bar.
+const double _kCompactBarHeight = 52;
+
+/// The documentation page: a sticky section sidebar beside a scrolling reading
+/// column. On compact widths the sidebar becomes a contents card at the top.
+class DocsPage extends StatefulWidget {
+  const DocsPage({super.key, this.initialSection});
+
+  /// A section id (e.g. `themes`) to scroll to on first load - set from the
+  /// `?section=` query param so other pages can deep-link into the docs.
+  final String? initialSection;
+
+  @override
+  State<DocsPage> createState() => _DocsPageState();
+}
+
+class _DocsPageState extends State<DocsPage> implements DocsSectionNavigator {
+  final ScrollController _controller = ScrollController();
+  final List<GlobalKey> _keys = List.generate(
+    docsSections.length,
+    (_) => GlobalKey(),
+  );
+  int _active = 0;
+
+  /// The app-wide nav popup bridge; we register with it so its section list and
+  /// scroll target come from this page whenever the popup is opened on docs.
+  NavSheetController? _navSheet;
+
+  static const double _anchorGap = AppLayout.navHeight + 24;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onScroll);
+    final target = widget.initialSection;
+    if (target != null) {
+      final index = docsSections.indexWhere((s) => s.id == target);
+      if (index != -1) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scrollTo(index);
+        });
+      }
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _navSheet = NavSheetScope.of(context)..docs = this;
+  }
+
+  @override
+  void dispose() {
+    if (_navSheet?.docs == this) _navSheet?.docs = null;
+    _controller.removeListener(_onScroll);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  // DocsSectionNavigator: lets the shared nav popup read the active section and
+  // scroll here, regardless of which control (nav bar or breadcrumb) opened it.
+  @override
+  int get activeSection => _active;
+
+  @override
+  void scrollToSection(int index) => _scrollTo(index);
+
+  void _onScroll() {
+    // On compact layouts the section headings scroll behind the pinned nav and
+    // breadcrumb bar, so a heading counts as active once it passes below both.
+    final threshold = context.isCompact
+        ? AppLayout.navHeight + _kCompactBarHeight + 24
+        : AppLayout.navHeight + 72;
+    var active = 0;
+    for (var i = 0; i < _keys.length; i++) {
+      final ctx = _keys[i].currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null) continue;
+      final dy = box.localToGlobal(Offset.zero).dy;
+      if (dy <= threshold) {
+        active = i;
+      } else {
+        break;
+      }
+    }
+    if (active != _active) setState(() => _active = active);
+  }
+
+  void _scrollTo(int index) {
+    final ctx = _keys[index].currentContext;
+    if (ctx == null) return;
+    final box = ctx.findRenderObject() as RenderBox;
+    final dy = box.localToGlobal(Offset.zero).dy;
+    // Compact stacks the nav over the pinned breadcrumb bar; land the heading
+    // just below both so it isn't hidden behind them.
+    final gap = context.isCompact
+        ? AppLayout.navHeight + _kCompactBarHeight + 16
+        : _anchorGap;
+    final target = (_controller.offset + dy - gap).clamp(
+      0.0,
+      _controller.position.maxScrollExtent,
+    );
+    setState(() => _active = index);
+    _controller.animateTo(
+      target,
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeInOutCubic,
+    );
+  }
+
+  /// Opens the app-wide navigation popup (site links + this page's section
+  /// list). The popup reads the active section and scrolls via this page's
+  /// [DocsSectionNavigator] registration, so nothing is returned here.
+  void _openNav() => showAppNavSheet(context, currentRoute: '/docs');
+
+  @override
+  Widget build(BuildContext context) {
+    return context.isCompact ? _buildCompact(context) : _buildWide(context);
+  }
+
+  Widget _buildWide(BuildContext context) {
+    // The sticky rail is pinned `navHeight + 24` below the viewport top; cap it
+    // at the remaining space so a section list taller than the window scrolls
+    // within the rail instead of running off screen.
+    final railMaxHeight = math.max(
+      0.0,
+      MediaQuery.sizeOf(context).height - AppLayout.navHeight - 24,
+    );
+    // One page-level scroll view so the scrollbar sits on the viewport's right
+    // edge and the whole page scrolls from anywhere; the sidebar is pinned to
+    // stay in view (CSS `position: sticky` equivalent).
+    // The app shell provides the page-wide SelectionArea; none is wrapped here.
+    return Scrollbar(
+      controller: _controller,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: _controller,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: AppLayout.navHeight + 24),
+              child: ContentContainer(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _StickyBox(
+                      controller: _controller,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: railMaxHeight),
+                        child: _Sidebar(active: _active, onTap: _scrollTo),
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                    Expanded(child: _sectionsColumn(context)),
+                  ],
+                ),
+              ),
+            ),
+            const SimpleFooter(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompact(BuildContext context) {
+    // The section rail collapses into a popup: a breadcrumb bar pinned under the
+    // nav opens it, and the reading column scrolls beneath both.
+    return Column(
+      children: [
+        const SizedBox(height: AppLayout.navHeight),
+        _CompactDocsBar(
+          sectionTitle: docsSections[_active].title,
+          onOpen: _openNav,
+        ),
+        Expanded(
+          // The app shell provides the page-wide SelectionArea.
+          child: SingleChildScrollView(
+            controller: _controller,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _sectionsColumn(context),
+                const SimpleFooter(),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionsColumn(BuildContext context) {
+    final compact = context.isCompact;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        compact ? 20 : 0,
+        compact ? 8 : 0,
+        compact ? 20 : 0,
+        96,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Copy the whole page as Markdown (for feeding to an LLM) / download
+          // it. Sits above the first section; web-only, and self-contained
+          // (renders nothing, no spacing, off web). See web/docs.md, which this
+          // page is kept in sync with.
+          const DocsMarkdownActions(),
+          for (var i = 0; i < docsSections.length; i++)
+            Padding(
+              key: _keys[i],
+              // Sections are separated with `space-y-8` (32px).
+              padding: EdgeInsets.only(top: i == 0 ? 0 : 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SectionTitle(docsSections[i].title),
+                  const SizedBox(height: 16),
+                  ..._content(context, docsSections[i].id),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: TextStyle(
+        color: context.colors.foreground,
+        fontSize: 30,
+        fontWeight: FontWeight.w600,
+        // Headings use `tracking-tight` (-0.025em ≈ -0.75px @30px).
+        letterSpacing: -0.75,
+        height: 1.2,
+      ),
+    );
+  }
+}
+
+class _Sidebar extends StatefulWidget {
+  const _Sidebar({required this.active, required this.onTap});
+
+  final int active;
+  final ValueChanged<int> onTap;
+
+  @override
+  State<_Sidebar> createState() => _SidebarState();
+}
+
+class _SidebarState extends State<_Sidebar> {
+  final ScrollController _controller = ScrollController();
+  final List<GlobalKey> _tileKeys = List.generate(
+    docsSections.length,
+    (_) => GlobalKey(),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    // Deep links land with a non-zero active section; jump the rail there.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _revealActive(animate: false);
+    });
+  }
+
+  @override
+  void didUpdateWidget(_Sidebar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active != oldWidget.active) _revealActive();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// Scrolls the rail just enough to keep the active tile visible as the
+  /// scroll-spy follows the page. The two edge-pinned policies are each a
+  /// no-op when the tile is already inside that edge, so at most one animates.
+  void _revealActive({bool animate = true}) {
+    if (!_controller.hasClients) return;
+    final object = _tileKeys[widget.active].currentContext?.findRenderObject();
+    if (object == null) return;
+    final duration = animate
+        ? const Duration(milliseconds: 250)
+        : Duration.zero;
+    for (final policy in const [
+      ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+    ]) {
+      _controller.position.ensureVisible(
+        object,
+        alignmentPolicy: policy,
+        duration: duration,
+        curve: Curves.easeInOutCubic,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Walk the groups in order, carrying a running index into the flattened
+    // section list so active-state and taps map back to the right anchor.
+    final children = <Widget>[];
+    var index = 0;
+    for (var gi = 0; gi < docsGroups.length; gi++) {
+      children.add(
+        Padding(
+          padding: EdgeInsets.only(top: gi == 0 ? 0 : 22, bottom: 8, left: 12),
+          child: DocsGroupLabel(docsGroups[gi].title),
+        ),
+      );
+      for (final section in docsGroups[gi].sections) {
+        final i = index++;
+        children.add(
+          DocsSectionTile(
+            key: _tileKeys[i],
+            label: section.title,
+            active: i == widget.active,
+            onTap: () => widget.onTap(i),
+          ),
+        );
+      }
+    }
+    return SizedBox(
+      width: 220,
+      child: SingleChildScrollView(
+        controller: _controller,
+        padding: const EdgeInsets.only(right: 12, bottom: 48),
+        child: Column(
+          // Stretch so the selected pill spans the full rail width,
+          // rather than shrink-wrapping the label.
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
+      ),
+    );
+  }
+}
+
+/// Pins its [child] to a fixed screen position while [controller] scrolls, by
+/// translating it downward by the current scroll offset - the equivalent of
+/// CSS `position: sticky` for a short left rail inside a page-level scroll.
+class _StickyBox extends StatelessWidget {
+  const _StickyBox({required this.controller, required this.child});
+
+  final ScrollController controller;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, sticky) {
+        // Guard on exactly one attached position: while resizing across the
+        // compact/wide breakpoint the old and new scroll views can both be
+        // attached to this controller for a frame, and `offset` throws when
+        // more than one position exists.
+        final offset = controller.positions.length == 1
+            ? controller.offset
+            : 0.0;
+        return Transform.translate(offset: Offset(0, offset), child: sticky);
+      },
+      child: child,
+    );
+  }
+}
+
+/// The compact trigger: a breadcrumb bar pinned under the nav that shows where
+/// you are (`Docs › <section>`) and opens the navigation popup on tap, styled
+/// as a compact mobile docs header.
+class _CompactDocsBar extends StatelessWidget {
+  const _CompactDocsBar({required this.sectionTitle, required this.onOpen});
+
+  final String sectionTitle;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return SelectionContainer.disabled(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onOpen,
+          child: Container(
+            height: _kCompactBarHeight,
+            decoration: BoxDecoration(
+              color: colors.background,
+              border: Border(bottom: BorderSide(color: colors.border)),
+            ),
+            child: ContentContainer(
+              child: Row(
+                children: [
+                  Text(
+                    'Docs',
+                    style: TextStyle(
+                      color: colors.mutedForeground,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // The icon set has no right chevron; a quarter-turn of the
+                  // dropdown chevron points it at the section title.
+                  RotatedBox(
+                    quarterTurns: 3,
+                    child: AppIcon(
+                      DiffIcon.chevronDown,
+                      size: 13,
+                      color: colors.mutedForeground,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      sectionTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.foreground,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---- Section content ------------------------------------------------------
+
+
+List<Widget> _content(BuildContext context, String id) {
+  switch (id) {
+    case 'introduction':
+      return const [
+        DocProse(
+          'ConstraintLayout is a layout for Flutter, ported from Android, that '
+          'positions and sizes children by the **constraints you declare** '
+          'instead of by nesting boxes. Every child is a direct child of one '
+          '`ConstraintLayout`, and each says where its own edges go: pinned to '
+          'the parent, or to a sibling.',
+        ),
+        DocProse(
+          'If you have built Flutter UIs you know the other way: a `Row` inside a '
+          '`Column` inside a `Stack` inside a `Padding`, several levels deep, '
+          'just to place a handful of widgets. ConstraintLayout keeps the tree '
+          '**flat**. Relationships that would otherwise need wrapper widgets '
+          '("put this after that", "line these up", "let this one fill the '
+          'rest") become properties on the child itself.',
+        ),
+        DocH3('The mental model'),
+        DocBullets([
+          '**Anchor, not nest.** A child links its edges (`start`, `top`, and so '
+              'on) to the parent or a sibling. `top: .bottomOf(#header)` reads as '
+              '"my top goes at the header\'s bottom".',
+          '**Ids, not order.** Children are identified by a `Symbol` id (like '
+              '`#header`) and refer to each other by id, so the order of the list '
+              'does not decide position.',
+          '**Solve, not stack.** One engine resolves every edge and size from '
+              'the constraints in a single pass. See **How the engine works**.',
+        ]),
+        DocProse(
+          'The rest of these docs walk the features one at a time, each with a '
+          'live example you can read beside the layout it produces. Everything '
+          'is behind a single import.',
+        ),
+      ];
+    case 'features':
+      return const [
+        DocProse(
+          'The whole of Android\'s ConstraintLayout is here, behind a single '
+          'import and a Flutter-native API. At a glance, this is what you get:',
+        ),
+        DocH3('Positioning'),
+        DocBullets([
+          '**Anchors and links.** Pin any edge (`start`, `end`, `top`, `bottom`, '
+              'the absolute `left` / `right`, or the text `baseline`) to the '
+              'parent or a sibling, with per-link `margin` and `goneMargin`.',
+          '**Centering and bias.** Opposing anchors center a child; '
+              '`horizontalBias` / `verticalBias` slide it along the axis, '
+              'proportional as the parent resizes.',
+          '**Circular positioning.** Place a child at an angle and radius around '
+              'another, for dials, clock faces, and radial menus.',
+        ]),
+        DocH3('Sizing'),
+        DocBullets([
+          '**Dimensions beyond wrap and fill.** `.matchConstraint` fills the span '
+              'between two anchors, `.percent` takes a fraction of the parent, '
+              'and `.spread` / `.constrainedWrap` bound a wrap.',
+          '**Aspect ratio.** Fix one axis and derive the other to hold a '
+              '`width / height` ratio, ideal for 16 : 9 or square media.',
+        ]),
+        DocH3('Chains and helpers'),
+        DocBullets([
+          '**Chains with weights.** Widgets linked to each other share an axis '
+              'like flexbox: `.spread`, `.spreadInside`, or `.packed`, splitting '
+              'leftover space by per-child weight.',
+          '**Guidelines.** An invisible line at a fixed offset or a percent of '
+              'the parent that many siblings can share.',
+          '**Barriers.** A line that tracks the furthest edge of a group, so '
+              'content always clears the tallest or widest member.',
+          '**Visibility.** Every child is `visible`, `invisible` (holds its '
+              'space), or `gone` (collapses, switching links to `goneMargin`).',
+        ]),
+        DocH3('Virtual layouts'),
+        DocBullets([
+          '**Flow and Grid.** `ConstraintFlow` and `ConstraintGrid` arrange '
+              'referenced children without wrapping them, so those children stay '
+              'direct siblings other constraints can still target.',
+        ]),
+        DocH3('Under it all'),
+        DocBullets([
+          '**A two-strategy engine.** A fast dependency graph for the common '
+              'case, a Cassowary solver for the genuinely simultaneous one.',
+          '**Pure Dart, every platform.** RTL-aware anchors, no native code, and '
+              'a resolver verified at parity with androidx core 1.1.1.',
+        ]),
+        DocProse(
+          'Each of these has its own section below, with a live example you can '
+          'read beside the layout it produces.',
+        ),
+      ];
+    case 'installation':
+      return const [
+        DocProse('Add the package with the Flutter CLI:'),
+        CodeBlock(
+          code: Snippets.install,
+          lang: 'shellscript',
+          showLineNumbers: false,
+        ),
+        DocProse('Or add it to your `pubspec.yaml` directly:'),
+        CodeBlock(
+          code: Snippets.pubspec,
+          lang: 'yaml',
+          filename: 'pubspec.yaml',
+        ),
+        DocProse(
+          'Then import it. That one import brings in every widget, dimension, '
+          'link, and helper you will see in these docs:',
+        ),
+        CodeBlock(
+          code: Snippets.importLine,
+          lang: 'dart',
+          showLineNumbers: false,
+        ),
+      ];
+    case 'quick-start':
+      return [
+        const DocProse(
+          'Here is a complete `ConstraintLayout` with one child, pinned 16 '
+          'logical pixels from the parent\'s top-start corner. The source is on '
+          'one side and the layout it renders on the other.',
+        ),
+        const DocNote(
+          'Every example uses `DemoBox`, a plain colored box with a label, in '
+          'place of real content, so the focus stays on the constraints. Swap it '
+          'for any widget of your own.',
+        ),
+        docExamples['quick-start']!,
+        const DocProse(
+          'Read each link as **"my edge, at the target\'s edge"**: '
+          '`start: .startOf(parent, margin: 16)` puts this child\'s start edge 16 '
+          'past the parent\'s start edge. Point it at a sibling id instead of '
+          '`parent` to pin to a sibling. That single idea, an edge linked to an '
+          'edge, is the whole foundation.',
+        ),
+      ];
+    case 'anchors':
+      return [
+        const DocProse(
+          'A **link** ties one of this widget\'s edges to an edge of a target. '
+          'The parameter names your edge; the constructor names the target\'s '
+          'edge. Horizontal edges come in absolute (`left`, `right`) and '
+          'RTL-aware (`start`, `end`) pairs; vertical edges are `top`, `bottom`, '
+          'and the text `baseline`.',
+        ),
+        docExamples['anchors']!,
+        const DocProse(
+          'In the example, B links to A rather than to the parent: '
+          '`start: .endOf(#a)` places B just after A and `top: .topOf(#a)` lines '
+          'their tops up. Move A and B follows.',
+        ),
+        const DocH3('The links'),
+        const DocTable(
+          headers: ['Your edge', 'Links to', 'Constructors'],
+          rows: [
+            ['`left` / `right`', 'Absolute horizontal edges', '`.leftOf` `.rightOf`'],
+            ['`start` / `end`', 'RTL-aware horizontal edges', '`.startOf` `.endOf`'],
+            ['`top` / `bottom`', 'Vertical edges', '`.topOf` `.bottomOf`'],
+            ['`baseline`', 'Text baseline', '`.baselineOf`'],
+          ],
+        ),
+        const DocProse(
+          'Every link takes a `margin`, and a `goneMargin` used instead when the '
+          'target is `gone` (see **Visibility**).',
+        ),
+      ];
+    case 'centering-bias':
+      return [
+        const DocProse(
+          'Give a widget **both** opposing anchors on an axis (start and end, or '
+          'top and bottom) and it centers between them. Add `horizontalBias` or '
+          '`verticalBias` to slide it along that axis: 0 hugs the start or top, 1 '
+          'hugs the end or bottom, and the default 0.5 is dead center.',
+        ),
+        docExamples['centering-bias']!,
+        const DocProse(
+          'Bias is how you place something "a third of the way down" or "near the '
+          'end" without hardcoding pixels: it stays proportional as the parent '
+          'resizes.',
+        ),
+      ];
+    case 'dimensions':
+      return [
+        const DocProse(
+          'A child\'s `width` and `height` are each a `Dimension`. Beyond the '
+          'familiar wrap-to-content and fill-the-parent, ConstraintLayout adds '
+          'sizes that only make sense with constraints: fill the space **between '
+          'two anchors**, or take a **percent** of the parent.',
+        ),
+        docExamples['dimensions']!,
+        const DocH3('The dimensions'),
+        const DocTable(
+          headers: ['Dimension', 'Sizes to'],
+          rows: [
+            ['`.wrapContent`', 'The child\'s own content (the default).'],
+            ['`.matchParent`', 'The full parent, ignoring anchors.'],
+            ['`.matchConstraint`', 'The space between the two opposing anchors.'],
+            ['`.fixed(n)`', 'Exactly n logical pixels.'],
+            ['`.percent(f)`', 'A fraction f of the parent on this axis.'],
+            ['`.spread(min, max)`', 'Like matchConstraint, but bounded.'],
+            ['`.constrainedWrap(...)`', 'Content, capped by the constraints.'],
+          ],
+        ),
+        const DocNote(
+          '`.matchConstraint`, `.percent`, and `.spread` need **both** edges on '
+          'the axis anchored, because they size to the space those edges define.',
+        ),
+      ];
+    case 'aspect-ratio':
+      return [
+        const DocProse(
+          'Set `aspectRatio` and the engine derives one dimension from the other '
+          'to hold a `width / height` ratio. Fix one axis, make the other '
+          '`matchConstraint`, and it is computed for you, ideal for media that '
+          'must stay 16 : 9 or square.',
+        ),
+        docExamples['aspect-ratio']!,
+      ];
+    case 'chains':
+      return [
+        const DocProse(
+          'When two or more widgets link to **each other** in a line (first to '
+          'second, second back to first, and so on) they form a **chain**: a '
+          'group that shares its space as a unit, much like flexbox\'s '
+          'justify-content. The two outer edges anchor to something outside the '
+          'chain.',
+        ),
+        docExamples['chains']!,
+        const DocH3('Chain styles'),
+        const DocProse(
+          'Set the style on the chain\'s **head** (the first member) with '
+          '`horizontalChainStyle` or `verticalChainStyle`:',
+        ),
+        const DocBullets([
+          '**`.spread`** (default): equal gaps everywhere, including the ends.',
+          '**`.spreadInside`**: the ends sit flush against the outer anchors, '
+              'with equal gaps between members.',
+          '**`.packed`**: members are packed together and the head\'s bias moves '
+              'the packed group along the axis.',
+        ]),
+        const DocProse(
+          'Give members a `matchConstraint` size along the axis plus a '
+          '`horizontalWeight` or `verticalWeight` to split the leftover space by '
+          'ratio, exactly like `Expanded`\'s flex.',
+        ),
+      ];
+    case 'guidelines':
+      return [
+        const DocProse(
+          'A `Guideline` is an invisible line at a fixed offset or a **percent** '
+          'of the parent that siblings anchor to. It is ideal for a shared '
+          'column edge: everything linked to it moves together when the guideline '
+          'moves.',
+        ),
+        docExamples['guidelines']!,
+        const DocProse(
+          'Use `Guideline.vertical` for a vertical line (siblings link their '
+          'horizontal edges to it) and `Guideline.horizontal` for a horizontal '
+          'one. Position it with exactly one of `begin`, `end`, or `percent`.',
+        ),
+      ];
+    case 'barriers':
+      return [
+        const DocProse(
+          'A `Barrier` is a line that tracks the **furthest** edge of a set of '
+          'widgets. Anchor a form\'s value column to a barrier over its labels '
+          'and the column always clears the longest label, no matter which one '
+          'grows.',
+        ),
+        docExamples['barriers']!,
+        const DocProse(
+          'Pick the `edge` to track (`start`, `end`, `top`, `bottom`, and the '
+          'absolute `left` / `right`) and list the widgets in `referenced`. A '
+          'barrier costs nothing to lay out; it only reports a position.',
+        ),
+      ];
+    case 'circular':
+      return [
+        const DocProse(
+          'The `circle` link places a widget at an **angle and radius** around '
+          'another widget\'s center, for radial menus, clock faces, or anything '
+          'arranged on a dial. 0 degrees points straight up and angles increase '
+          'clockwise.',
+        ),
+        docExamples['circular']!,
+      ];
+    case 'visibility':
+      return [
+        const DocProse(
+          'Every child has a `visibility`, mirroring Android\'s three states:',
+        ),
+        const DocBullets([
+          '**`.visible`** (default): laid out and drawn.',
+          '**`.invisible`**: laid out and holds its space, but is not drawn, '
+              'siblings still anchor to it exactly as if it were there.',
+          '**`.gone`**: collapses to a zero-size point and is skipped entirely, '
+              'and links targeting it switch from `margin` to `goneMargin`.',
+        ]),
+        docExamples['visibility']!,
+        const DocProse(
+          '`gone` removes a widget and reflows around it in one step, and '
+          '`goneMargin` lets neighbors keep a sensible gap when they do. Because '
+          'it is only a property, toggling it animates cleanly.',
+        ),
+        const DocH3('Try it'),
+        const DocProse(
+          'Flip B between the three states and watch C: `invisible` keeps B\'s '
+          'space (C does not move), while `gone` collapses it and C slides in on '
+          'its `goneMargin`.',
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 8),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kProseWidth),
+            child: const VisibilityToggleDemo(),
+          ),
+        ),
+      ];
+    case 'flow':
+      return [
+        const DocProse(
+          'If you have reached for `Wrap` to lay a run of chips or buttons out '
+          'and let them spill onto the next line, `ConstraintFlow` is the '
+          'constraint-native version. The difference is that it is **virtual**: '
+          'it does not wrap the widgets it arranges in a subtree of its own.',
+        ),
+        const DocH3('What "virtual" means'),
+        const DocProse(
+          'A normal layout widget like `Row` or `Wrap` becomes the parent of its '
+          'children: they live inside it, and nothing outside can point at them. '
+          'A virtual layout is different. Its children stay **direct siblings** '
+          'in the one `ConstraintLayout`; the flow only reads their sizes and '
+          'hands back positions. You list the ones it should arrange by id in '
+          '`referenced`, and they remain fair game for any other constraint, so '
+          'a barrier or a chain can still target a widget that a flow is placing.',
+        ),
+        const DocProse(
+          'It lays the referenced widgets out in a chain and wraps to a new run '
+          'when it runs out of width, just like `Wrap`, but every wrapped run is '
+          'itself a chain you can style.',
+        ),
+        docExamples['flow']!,
+        const DocH3('Wrap modes'),
+        const DocBullets([
+          '**`.none`**: a single run that does not wrap (a plain chain).',
+          '**`.chain`**: wraps into balanced chains, each run laid out '
+              'independently, the closest match to `Wrap`.',
+          '**`.aligned`**: wraps and also lines the runs up column-for-column, '
+              'so the result reads as a grid.',
+        ]),
+        const DocProse(
+          'Set `horizontalGap` and `verticalGap` for the spacing between items '
+          'and runs, and `horizontalChainStyle` / `contentHorizontalBias` to '
+          'control how each run distributes its slack, exactly as a chain does.',
+        ),
+      ];
+    case 'grid':
+      return [
+        const DocProse(
+          '`ConstraintGrid` is to `GridView` what `ConstraintFlow` is to `Wrap`: '
+          'it places its `referenced` children into a fixed grid of `rows` by '
+          '`columns` cells, in order. Unlike `GridView` it does not scroll and '
+          'does not become their parent; it is **virtual**, so the tiles stay '
+          'siblings in the single layer that other constraints can still target.',
+        ),
+        const DocProse(
+          'Children fill the cells left to right, top to bottom. Give a tile '
+          '`width: .matchConstraint` and `height: .matchConstraint` to fill its '
+          'cell, or leave it to wrap its own content and sit within the cell.',
+        ),
+        docExamples['grid']!,
+        const DocH3('Spans, skips, and weights'),
+        const DocBullets([
+          '**Spans** let one tile cover several cells: `spans: \'0:1x2\'` makes '
+              'the tile at cell 0 span one row and two columns, using Android\'s '
+              '`index:RxC` syntax.',
+          '**Skips** leave cells empty so the flow of tiles steps over them, '
+              'with the same `index:RxC` syntax in `skips`.',
+          '**Weights** (`rowWeights`, `columnWeights`) hand out the grid\'s space '
+              'unevenly, so a column can take twice the width of its neighbor.',
+        ]),
+        const DocProse(
+          'Anchor the grid itself like any child (here all four edges to the '
+          'parent), and it sizes and positions the whole set of tiles as a unit.',
+        ),
+      ];
+    case 'profile-card':
+      return [
+        const DocProse(
+          'Here is a small, real layout that uses several features at once: an '
+          'avatar, a name and handle beside it, a **barrier** under the taller of '
+          'the header pieces, and a bio spanning the full width below. It is one '
+          'flat layer, with no `Row`, `Column`, or `Stack` nesting.',
+        ),
+        docExamples['profile-card']!,
+        const DocProse(
+          'Each piece states its own relationships: the name fills the width up '
+          'to the parent\'s end (`matchConstraint`), the handle sits under the '
+          'name, and the bio starts below `#headerEnd` (the barrier), so it '
+          'always clears both the avatar and the text no matter which is taller.',
+        ),
+      ];
+    case 'engine':
+      return const [
+        DocProse(
+          'ConstraintLayout does not position children by nesting boxes; it '
+          '**solves** for each child\'s location and size from the constraints '
+          'you declared. It does that with a two-strategy engine, both parts '
+          'faithfully ported from `androidx.constraintlayout.core`.',
+        ),
+        DocH3('Dependency graph (the fast path)'),
+        DocProse(
+          'Most layouts are deterministic: once the parent size and a widget\'s '
+          'anchors and dimension are known, its position follows by propagation. '
+          'The graph models each measurable quantity as a node, resolves them in '
+          'dependency order, and measures each child exactly once, with no '
+          'iteration and no search. This is the path almost every real screen '
+          'takes, and its cost scales close to linearly with the widget count.',
+        ),
+        DocH3('Cassowary solver (the fallback)'),
+        DocProse(
+          'Some arrangements are a genuine system of simultaneous equations: a '
+          'weighted chain sharing leftover space, a widget centered between two '
+          'moving anchors, an aspect-ratio member inside a chain. For those the '
+          'engine falls back to a linear constraint solver, a port of Android\'s '
+          '`LinearSystem`, which implements the **Cassowary** algorithm (the same '
+          'family behind Apple\'s Auto Layout).',
+        ),
+        DocH3('Persistent, incremental model'),
+        DocProse(
+          'The engine model is built once and kept alive across frames, then '
+          'invalidated in tiers so a steady-state frame does as little as '
+          'possible:',
+        ),
+        DocBullets([
+          '**fast**: nothing layout-affecting changed, so the engine is skipped '
+              'and the previous geometry reused. This carries scrolling and '
+              'animation over a static graph.',
+          '**in-place**: a margin, bias, or dimension changed, so the model is '
+              'updated in place and re-resolved without a rebuild.',
+          '**rebuild**: the child set or a helper changed structurally, so the '
+              'model is rebuilt from scratch.',
+        ]),
+        DocProse(
+          'The graph path resolves a 1200-widget screen in well under a '
+          'millisecond; the solver is heavier and reserved for the layouts that '
+          'genuinely need it.',
+        ),
+      ];
+    case 'android':
+      return const [
+        DocProse(
+          'The engine is a line-faithful port of `constraintlayout-core`, pinned '
+          'to a specific upstream revision and verified at parity with the '
+          'released core 1.1.1. The upstream core test suite is ported and green, '
+          'so a given layout resolves to the same result Android produces.',
+        ),
+        DocProse(
+          'The one structural departure is the entry path: Android runs the '
+          'Cassowary solver by default with an optional graph optimization, '
+          'whereas this port tries the dependency graph first and falls back to '
+          'the solver (see **How the engine works**).',
+        ),
+      ];
+    default:
+      return const [];
+  }
+}

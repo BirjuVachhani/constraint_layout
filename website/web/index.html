@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary SEO. The site is a client-rendered Flutter (WASM) app, so this
+       static metadata is what search engines and social scrapers actually read
+       before any Dart runs. Per-route titles/descriptions are updated at
+       runtime for real users and JS crawlers (see lib/src/seo/). -->
+  <title>constraint_layout: constraint-based layout for Flutter</title>
+  <meta name="description" content="A faithful port of Android ConstraintLayout to Flutter, in pure Dart. Position and size every child by the constraints you declare, and keep your widget tree flat instead of nesting rows, columns, and stacks.">
+  <meta name="author" content="Birju Vachhani">
+  <meta name="keywords" content="Flutter ConstraintLayout, constraint layout Flutter, Dart layout, flat widget tree, constraint solver, chains, guidelines, barriers, aspect ratio, Flow, Grid">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://constraintlayout.birju.dev/">
+  <meta name="theme-color" content="#0C1117">
+
+  <!-- Open Graph (Facebook, LinkedIn, Slack, Discord). Absolute URLs are
+       required by scrapers. Since scrapers do not run JS, every route shares
+       this one static preview. -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="constraint_layout">
+  <meta property="og:title" content="constraint_layout: constraint-based layout for Flutter">
+  <meta property="og:description" content="A faithful port of Android ConstraintLayout to Flutter, in pure Dart. Position and size every child by the constraints you declare, and keep your widget tree flat instead of nesting rows, columns, and stacks.">
+  <meta property="og:url" content="https://constraintlayout.birju.dev/">
+  <meta property="og:image" content="https://constraintlayout.birju.dev/banner.png">
+  <meta property="og:image:width" content="1920">
+  <meta property="og:image:height" content="1080">
+  <meta property="og:image:alt" content="constraint_layout: constraint-based layout for Flutter">
+  <meta property="og:locale" content="en_US">
+
+  <!-- X (Twitter) card. TODO: add twitter:site / twitter:creator once the
+       project X handle exists. -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="constraint_layout: constraint-based layout for Flutter">
+  <meta name="twitter:description" content="A faithful port of Android ConstraintLayout to Flutter, in pure Dart. Position and size every child by the constraints you declare, and keep your widget tree flat instead of nesting rows, columns, and stacks.">
+  <meta name="twitter:image" content="https://constraintlayout.birju.dev/banner.png">
+  <meta name="twitter:image:alt" content="constraint_layout: constraint-based layout for Flutter">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="constraint_layout">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon: the constraint_layout mark as SVG, with a PNG fallback for older
+       browsers. -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <link rel="manifest" href="manifest.json">
+
+  <!-- AI assistants and crawlers: this is a client-rendered Flutter (WASM) app,
+       so the rendered page text lives in a canvas, not the DOM. The full
+       documentation is available as plain text at /llms.txt and /docs.md. -->
+  <link rel="alternate" type="text/markdown" href="/docs.md"
+        title="constraint_layout documentation (Markdown)">
+
+  <!-- Structured data. Static in the DOM, so Google reads it even though the
+       app itself renders to a canvas. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://constraintlayout.birju.dev/#website",
+        "url": "https://constraintlayout.birju.dev/",
+        "name": "constraint_layout",
+        "description": "A faithful port of Android ConstraintLayout to Flutter, in pure Dart. Position and size every child by the constraints you declare, and keep your widget tree flat instead of nesting rows, columns, and stacks.",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://constraintlayout.birju.dev/#software",
+        "name": "constraint_layout",
+        "description": "A faithful port of Android ConstraintLayout to Flutter, in pure Dart. Every child is a direct child of one ConstraintLayout and is positioned and sized by the constraints you declare, so the widget tree stays flat instead of nesting rows, columns, and stacks. It runs on iOS, Android, web, macOS, Windows, and Linux.",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "iOS, Android, Web, macOS, Windows, Linux",
+        "programmingLanguage": "Dart",
+        "softwareVersion": "0.1.0",
+        "url": "https://constraintlayout.birju.dev/",
+        "image": "https://constraintlayout.birju.dev/banner.png",
+        "downloadUrl": "https://pub.dev/packages/constraint_layout",
+        "codeRepository": "https://github.com/BirjuVachhani/constraint_layout",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "author": {
+          "@type": "Person",
+          "name": "Birju Vachhani",
+          "url": "https://github.com/BirjuVachhani",
+          "sameAs": "https://github.com/BirjuVachhani"
+        }
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    /* Dark background before Flutter boots, to avoid a white flash. */
+    html, body { margin: 0; background-color: #0C1117; }
+
+    /* Branded loading indicator shown until Flutter paints its first frame.
+       Pure HTML/CSS: the site's Geist fonts are Flutter-bundled and not
+       available here, so the loader uses no text, just the mark and a thin
+       indeterminate azure-to-green bar. */
+    #loading {
+      position: fixed; inset: 0; z-index: 2147483647;
+      display: flex; align-items: center; justify-content: center;
+      background-color: #0C1117;
+      opacity: 1; transition: opacity 320ms ease;
+    }
+    #loading.loaded { opacity: 0; }
+    .loader-inner { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+    .loader-logo { width: 72px; height: 72px; animation: cl-breathe 1.8s ease-in-out infinite; }
+    .loader-bar {
+      width: 132px; height: 3px; border-radius: 999px; overflow: hidden;
+      background-color: rgba(255, 255, 255, 0.08);
+    }
+    .loader-bar-fill {
+      display: block; height: 100%; width: 40%; border-radius: 999px;
+      background: linear-gradient(90deg, #1FBCFD, #47D1FD, #5ECC71);
+      animation: cl-slide 1.15s ease-in-out infinite;
+    }
+    @keyframes cl-slide { 0% { transform: translateX(-120%); } 100% { transform: translateX(360%); } }
+    @keyframes cl-breathe { 0%, 100% { opacity: .85; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } }
+    @media (prefers-reduced-motion: reduce) {
+      #loading { transition: none; }
+      .loader-logo { animation: none; }
+      .loader-bar-fill { animation: none; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Crawlable fallback for bots and AI assistants that do not run the Flutter
+       (WASM) app: real text plus links to the plain-text docs. Only shown when
+       JavaScript is disabled, so it never reaches real users and cannot be seen
+       as hidden or cloaked content. -->
+  <noscript>
+    <main>
+      <h1>constraint_layout</h1>
+      <p>A faithful port of Android ConstraintLayout to Flutter, in pure Dart.
+         Every child is a direct child of one ConstraintLayout and is positioned
+         and sized by the constraints you declare, so the widget tree stays flat
+         instead of nesting rows, columns, and stacks. It runs on iOS, Android,
+         web, macOS, Windows, and Linux.</p>
+      <p>This site is a Flutter web application rendered to a canvas. Read the
+         documentation as plain text instead:</p>
+      <ul>
+        <li><a href="/docs.md">Complete documentation (Markdown)</a></li>
+        <li><a href="/llms.txt">llms.txt (for AI assistants)</a></li>
+        <li><a href="/docs">Interactive documentation</a></li>
+        <li><a href="https://pub.dev/packages/constraint_layout">Package on pub.dev</a></li>
+        <li><a href="https://github.com/BirjuVachhani/constraint_layout">Source on GitHub</a></li>
+      </ul>
+    </main>
+  </noscript>
+
+  <!-- Branded loader: the constraint_layout mark (inlined from favicon.svg so
+       it needs no network fetch) above a thin indeterminate azure-to-green bar.
+       The inline script below removes it once Flutter paints. -->
+  <div id="loading" role="presentation" aria-hidden="true">
+    <div class="loader-inner">
+      <svg class="loader-logo" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="6" y="6" width="244" height="244" rx="58" fill="#0C1117"/>
+        <rect x="8" y="8" width="240" height="240" rx="56" fill="none" stroke="#1FBCFD" stroke-opacity="0.35" stroke-width="4"/>
+        <line x1="89" y1="128" x2="167" y2="128" stroke="#1FBCFD" stroke-opacity="0.5" stroke-width="4" stroke-dasharray="2 12" stroke-linecap="round"/>
+        <line x1="128" y1="89" x2="128" y2="167" stroke="#5ECC71" stroke-opacity="0.5" stroke-width="4" stroke-dasharray="2 12" stroke-linecap="round"/>
+        <rect x="48" y="48" width="82" height="82" rx="20" fill="#1FBCFD"/>
+        <rect x="126" y="126" width="82" height="82" rx="20" fill="#5ECC71"/>
+      </svg>
+      <div class="loader-bar"><span class="loader-bar-fill"></span></div>
+    </div>
+  </div>
+  <script>
+    // Remove the branded loader once Flutter renders. Arms a MutationObserver
+    // before the engine boots, waits two frames after the flutter view is
+    // injected (so the first paint lands before we fade), then fades + removes.
+    (function () {
+      var loader = document.getElementById('loading');
+      if (!loader) return;
+      var done = false, obs;
+      function hide() {
+        if (done) return;
+        done = true;
+        if (obs) obs.disconnect();
+        loader.classList.add('loaded');
+        setTimeout(function () { loader.remove(); }, 400);
+      }
+      obs = new MutationObserver(function () {
+        if (document.querySelector('flutter-view, flt-glass-pane, flt-scene-host')) {
+          requestAnimationFrame(function () { requestAnimationFrame(hide); });
+        }
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+      setTimeout(hide, 15000); // fallback: never leave the loader stuck
+    })();
+  </script>
+
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

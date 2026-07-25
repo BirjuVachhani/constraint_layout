@@ -1,0 +1,69 @@
+name: constraint_layout_website
+
+description: "Showcase website for the constraint_layout package."
+
+publish_to: none
+
+version: 1.0.0+1
+
+resolution: workspace
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  flutter_web_plugins:
+    sdk: flutter
+
+  # The package this site showcases (the local workspace copy).
+  constraint_layout:
+    path: ../
+
+  # Syntax highlighting for the docs code blocks, themed with the Pierre
+  # light/dark pair (see lib/src/highlight/highlighter_service.dart).
+  shiki_flutter: ^1.0.1
+
+  go_router: ^17.3.0
+  url_launcher: ^6.3.2
+  flutter_svg: ^2.3.0
+
+  # Browser interop for the docs "Copy as Markdown" control: fetch the served
+  # web/docs.md and trigger a download. Web-only (guarded behind a conditional
+  # import), so it never enters the IO/desktop build.
+  web: ^1.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/
+    - assets/fonts/
+    - assets/icons/
+
+  fonts:
+    - family: Geist
+      fonts:
+        - asset: assets/fonts/Geist-400.ttf
+          weight: 400
+        - asset: assets/fonts/Geist-500.ttf
+          weight: 500
+        - asset: assets/fonts/Geist-600.ttf
+          weight: 600
+        - asset: assets/fonts/Geist-700.ttf
+          weight: 700
+    - family: Geist Mono
+      fonts:
+        - asset: assets/fonts/GeistMono-400.ttf
+          weight: 400
+        - asset: assets/fonts/GeistMono-500.ttf
+          weight: 500
+        - asset: assets/fonts/GeistMono-700.ttf
+          weight: 700

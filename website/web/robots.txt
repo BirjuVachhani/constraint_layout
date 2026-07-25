@@ -1,0 +1,28 @@
+# https://constraintlayout.birju.dev
+# Full docs for AI assistants and crawlers: https://constraintlayout.birju.dev/llms.txt
+# (the same docs are also served as plain Markdown at /docs.md)
+
+User-agent: *
+Allow: /
+
+# AI crawlers are explicitly welcome: constraint_layout is open source and we
+# want assistants to answer accurately from the docs.
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://constraintlayout.birju.dev/sitemap.xml
