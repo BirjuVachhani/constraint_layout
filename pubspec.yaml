@@ -1,0 +1,30 @@
+name: constraint_layout
+
+description: "A new Flutter package project."
+
+version: 0.1.0
+
+homepage:
+
+environment:
+  sdk: ^3.12.0
+  flutter: ">=3.44.0"
+
+# Note: playground/ is a local-only scratch app excluded from VCS (see
+# .gitignore). It must not be listed here, or pub get would fail on a
+# fresh clone where the directory does not exist.
+workspace:
+  - packages/constraint_engine
+  - website
+
+dependencies:
+  flutter:
+    sdk: flutter
+  constraint_engine: ^0.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:

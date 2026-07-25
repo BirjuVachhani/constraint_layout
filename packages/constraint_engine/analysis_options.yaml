@@ -1,0 +1,17 @@
+include: package:lints/recommended.yaml
+
+formatter:
+  trailing_commas: preserve
+
+# This package is a faithful port of Android ConstraintLayout's Java engine.
+# The algorithm-carrying classes intentionally keep the upstream constant names
+# and structure to stay 1:1 with the source and minimize porting errors.
+linter:
+  rules:
+    constant_identifier_names: false
+    non_constant_identifier_names: false
+    library_private_types_in_public_api: false
+    prefer_final_fields: false
+    unnecessary_getters_setters: false
+    avoid_renaming_method_parameters: false
+    use_super_parameters: false
