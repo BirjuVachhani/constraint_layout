@@ -8,11 +8,15 @@ import 'package:test/test.dart';
 /// wrapContent height before its matchConstraint width is resolved produces a
 /// wildly tall result, exactly like real text wrapping at width 0.
 class _TextLikeMeasurer implements Measurer {
-  _TextLikeMeasurer(this.length, {this.lineHeight = 20});
+  _TextLikeMeasurer(this.length);
 
   /// Content length per widget, keyed by debug name.
   final Map<String, int> length;
-  final int lineHeight;
+
+  /// Height contributed per wrapped line. Fixed: no test varies it, so it is a
+  /// plain field rather than a constructor parameter (which would never be
+  /// supplied and trips the `unused_element_parameter` lint).
+  final int lineHeight = 20;
 
   @override
   void measure(ConstraintWidget widget, Measure measure) {
