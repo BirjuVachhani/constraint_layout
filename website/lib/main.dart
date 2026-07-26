@@ -16,10 +16,24 @@ void main() {
   // "blueprint" toggles on the home page actually render.
   ConstraintLayout.allowDebugFlags = true;
   // The docs render every code block live with shiki_flutter, themed with the
-  // Pierre light/dark pair so the code follows the site's light/dark mode. Web
-  // uses the pure-Dart embedded engine by default (no WebAssembly, no worker),
-  // which is plenty fast for the small snippets shown here.
+  // Pierre light/dark pair so the code follows the site's light/dark mode.
+  //
+  // Web uses the embedded engine (shiki_flutter's default, and its fastest on
+  // web). asyncWeb pushes tokenization off the main thread onto a Web Worker:
+  // the dart2js-compiled web/shiki_tokenize_worker.js, installed and refreshed on
+  // upgrade with `dart run shiki_flutter:install --default`.
+  //
+  // Compiling that worker with dart2js is what keeps the embedded engine correct
+  // here. Its RegExp fast path relies on Dart's RegExp lowering to the browser's
+  // native regex, which holds under dart2js but NOT under this app's own dart2wasm
+  // build (flutter build web --wasm). So the worker must stay installed: it is
+  // the always-taken path once its `ready` handshake lands. If it ever fails to
+  // load (missing file, a worker-blocking CSP, or a slow handshake), shiki_flutter
+  // falls back to inline tokenization on the wasm main thread, where the embedded
+  // engine's fast path breaks and code renders unhighlighted.
   ShikiHighlighter.config = const ShikiHighlighterConfig(
+    webEngine: ShikiHighlighterEmbeddedEngine(),
+    asyncWeb: true,
     defaultTheme: .dual(
       light: PierreThemes.pierreLight,
       dark: PierreThemes.pierreDark,
