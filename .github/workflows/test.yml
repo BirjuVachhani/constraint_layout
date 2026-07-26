@@ -1,0 +1,47 @@
+name: Tests
+
+# Runs the full test suite for every workspace package. Everything runs on
+# macOS because the debug golden tests (test/debug/goldens/*.png) are generated
+# on macOS and are sensitive to platform font/raster differences.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs for the same branch / PR.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (macOS)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          # Pinned to match the version this repo is developed against.
+          flutter-version: 3.44.6
+          cache: true
+
+      - name: Resolve workspace dependencies
+        # One resolve at the root covers every workspace member (root package,
+        # packages/constraint_engine, website).
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Engine tests (constraint_engine)
+        working-directory: packages/constraint_engine
+        run: dart test
+
+      - name: Package tests (constraint_layout, incl. goldens)
+        run: flutter test
