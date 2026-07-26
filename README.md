@@ -85,8 +85,7 @@ ConstraintLayout(
 - **`debugShowChains`** paints the overlay over the normally painted children:
   constraint connections as curved arrows, opposing constraints as zigzag
   springs (the far leg of a biased pair is dashed), chains as interlocking
-  chain links, margin values with end ticks, anchors (solid when connected,
-  hollow when not), plus guidelines and barriers.
+  chain links, margin values with end ticks, plus guidelines and barriers.
 - **`debugShowBlueprint`** does not paint the children at all. Instead it
   draws the Android Studio blueprint surface: a dark teal background with a
   translucent framed box per child, labels, and the same constraint drawing.
@@ -107,9 +106,20 @@ ConstraintLayout(
 The rendering replicates the Android Studio design-surface specs (connection
 classification, spring and chain-link geometry, the blueprint palette) lifted
 from the layout-editor source; see `docs/DEBUG_VISUALIZATION.md` for the full
-spec. All overlay painting runs inside asserts, so it is compiled out of
-profile and release builds; the flags exist there but are inert. The
-playground app has app-bar toggles for both modes on every scenario.
+spec. The playground app has app-bar toggles for both modes on every scenario.
+
+By default the overlays only render in debug builds: both flags are honored
+when `kDebugMode` is true and are inert no-ops in profile and release. To force
+them on outside debug (for a hosted showcase, a screenshot build, or a release
+diagnostic), set the global switch before the overlay is painted:
+
+```dart
+ConstraintLayout.allowDebugFlags = true; // defaults to kDebugMode
+```
+
+It defaults to `kDebugMode`. Enabling it keeps the debug-overlay rendering code
+in the release binary, so leave it at the default unless you actually need the
+overlays in a non-debug build.
 
 ## How the engine works
 

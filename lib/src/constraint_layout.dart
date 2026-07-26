@@ -1,4 +1,5 @@
 import 'package:constraint_engine/constraint_engine.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/rendering.dart';
 // The engine also declares a class named Flow (the virtual layout).
 import 'package:flutter/widgets.dart' hide Flow;
@@ -23,6 +24,21 @@ const Symbol parent = #parent;
 /// sized relative to [parent] or to sibling ids. Positions are resolved by the
 /// pure-Dart dependency-graph engine in `package:constraint_engine`.
 class ConstraintLayout extends MultiChildRenderObjectWidget {
+  /// Whether [debugShowChains] and [debugShowBlueprint] are honored at all.
+  ///
+  /// Defaults to [kDebugMode], so the design-surface and blueprint overlays are
+  /// active in debug builds and inert in profile and release. Set it to true
+  /// (e.g. in `main`) to force the overlays on in a release build, for a demo,
+  /// a design review, or this package's own docs site:
+  ///
+  /// ```dart
+  /// ConstraintLayout.allowDebugFlags = true;
+  /// ```
+  ///
+  /// Note: enabling this keeps the debug-overlay rendering code in the release
+  /// binary. Leave it at the default if you want that code tree-shaken away.
+  static bool allowDebugFlags = kDebugMode;
+
   /// Creates a constraint layout.
   ///
   /// [textDirection] resolves `start`/`end` edges to left/right. When omitted,
@@ -44,7 +60,8 @@ class ConstraintLayout extends MultiChildRenderObjectWidget {
   /// constraint connections, chain links, springs, margin values, anchors,
   /// guidelines, and barriers.
   ///
-  /// Debug builds only; a no-op in profile and release builds.
+  /// Honored in debug builds, and in profile/release only when
+  /// [allowDebugFlags] is set; otherwise a no-op.
   final bool debugShowChains;
 
   /// Replaces the children with Android Studio blueprint mode: a dark surface
@@ -52,8 +69,9 @@ class ConstraintLayout extends MultiChildRenderObjectWidget {
   /// constraint/chain drawing as [debugShowChains]. Children are still laid
   /// out and hit-testable, just not painted.
   ///
-  /// Takes precedence over [debugShowChains] when both are set. Debug builds
-  /// only; a no-op in profile and release builds.
+  /// Takes precedence over [debugShowChains] when both are set. Honored in
+  /// debug builds, and in profile/release only when [allowDebugFlags] is set;
+  /// otherwise a no-op.
   final bool debugShowBlueprint;
 
   /// Tints every overlay line (constraints, chains, springs, guidelines,
@@ -148,8 +166,9 @@ class RenderConstraintLayout extends RenderBox
   bool get _ltr => _textDirection != TextDirection.rtl;
 
   // Debug-overlay configuration. Paint-only: the setters never touch the
-  // layout or the persistent engine model, and the overlay itself is
-  // assert-gated (see paint), so these are inert outside debug builds.
+  // layout or the persistent engine model, and the overlay itself is gated by
+  // ConstraintLayout.allowDebugFlags (see paint), so these are inert unless
+  // that flag is set (which it is by default only in debug builds).
   bool _debugShowChains;
   bool _debugShowBlueprint;
   Color? _debugChainColor;
@@ -893,44 +912,43 @@ class RenderConstraintLayout extends RenderBox
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    // Blueprint mode replaces the children's painting; the flag can only take
-    // effect in debug builds. Skipping paintChild is safe with descendant
-    // RepaintBoundary widgets: their layers simply are not composited.
-    var paintChildren = true;
-    assert(() {
-      if (_debugShowBlueprint) paintChildren = false;
-      return true;
-    }());
-    if (paintChildren) {
+    // The debug overlays are honored only when ConstraintLayout.allowDebugFlags
+    // is set (true by default in debug builds, false in profile/release unless
+    // the app opts in). When it is off both flags read as false here, so this
+    // stays a normal child paint.
+    final debugEnabled = ConstraintLayout.allowDebugFlags;
+    final showBlueprint = debugEnabled && _debugShowBlueprint;
+    final showChains = debugEnabled && _debugShowChains;
+
+    // Blueprint mode replaces the children's painting. Skipping paintChild is
+    // safe with descendant RepaintBoundary widgets: their layers simply are not
+    // composited.
+    if (!showBlueprint) {
       for (final child in _paintOrder()) {
         final pd = child.parentData! as ConstraintParentData;
         if (pd.visibility != ConstraintVisibility.visible) continue;
         context.paintChild(child, pd.offset + offset);
       }
     }
-    // The overlay is assert-gated so all of its work is tree-shaken from
-    // profile and release builds. context.canvas is read here, after the
-    // paintChild calls, because the getter re-acquires the canvas.
-    assert(() {
-      if ((_debugShowBlueprint || _debugShowChains) && _container != null) {
-        final tint = _debugChainColor;
-        final palette = tint != null
-            ? DebugPalette.tinted(tint, blueprint: _debugShowBlueprint)
-            : _debugShowBlueprint
-                ? const DebugPalette.blueprint()
-                : const DebugPalette.design();
-        paintDebugScene(
-          context.canvas,
-          offset,
-          size,
-          debugDescribeScene(),
-          palette,
-          blueprint: _debugShowBlueprint,
-          labelStyle: _debugLabelStyle,
-        );
-      }
-      return true;
-    }());
+    // The design-surface / blueprint overlay. context.canvas is read here,
+    // after the paintChild calls, because the getter re-acquires the canvas.
+    if ((showBlueprint || showChains) && _container != null) {
+      final tint = _debugChainColor;
+      final palette = tint != null
+          ? DebugPalette.tinted(tint, blueprint: showBlueprint)
+          : showBlueprint
+              ? const DebugPalette.blueprint()
+              : const DebugPalette.design();
+      paintDebugScene(
+        context.canvas,
+        offset,
+        size,
+        debugDescribeScene(),
+        palette,
+        blueprint: showBlueprint,
+        labelStyle: _debugLabelStyle,
+      );
+    }
   }
 
   @override

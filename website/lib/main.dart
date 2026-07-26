@@ -1,3 +1,4 @@
+import 'package:constraint_layout/constraint_layout.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:shiki_flutter/shiki_flutter.dart';
@@ -10,6 +11,10 @@ import 'src/widgets/nav_sheet.dart';
 void main() {
   // Clean URLs for the web (/, /docs) instead of hash fragments.
   usePathUrlStrategy();
+  // The site ships as a release web build, where ConstraintLayout's debug
+  // overlays are off by default. Opt in so the per-preview "chains" and
+  // "blueprint" toggles on the home page actually render.
+  ConstraintLayout.allowDebugFlags = true;
   // The docs render every code block live with shiki_flutter, themed with the
   // Pierre light/dark pair so the code follows the site's light/dark mode. Web
   // uses the pure-Dart embedded engine by default (no WebAssembly, no worker),

@@ -1,3 +1,4 @@
+import 'package:constraint_layout/constraint_layout.dart';
 import 'package:flutter/material.dart';
 
 import '../highlight/highlighter_service.dart';
@@ -25,6 +26,7 @@ class LiveExample extends StatelessWidget {
     this.previewPadding = const EdgeInsets.all(16),
     this.caption,
     this.maxHeight,
+    this.debugToggles = false,
   });
 
   /// Dart source shown in the code card (and copied by the copy button).
@@ -51,9 +53,15 @@ class LiveExample extends StatelessWidget {
   /// growing, and the preview matches it. Null lets the pair grow to fit.
   final double? maxHeight;
 
-  /// A copy of this example capped to [height] tall in the side-by-side layout.
-  /// Lets a shared example (used in the docs at full height) be height-limited
-  /// on the home page without duplicating its code and builder.
+  /// Whether the preview shows the "chains" and "blueprint" debug toggles in
+  /// its header, letting the reader overlay the constraint design surface on
+  /// the live layout. Used on the home page only.
+  final bool debugToggles;
+
+  /// A copy of this example capped to [height] tall in the side-by-side layout,
+  /// and with the debug toggles turned on. Lets a shared example (used in the
+  /// docs at full height, no toggles) become the home-page variant without
+  /// duplicating its code and builder.
   LiveExample capped(double height) => LiveExample(
     code: code,
     builder: builder,
@@ -62,6 +70,7 @@ class LiveExample extends StatelessWidget {
     previewPadding: previewPadding,
     caption: caption,
     maxHeight: height,
+    debugToggles: true,
   );
 
   @override
@@ -90,6 +99,7 @@ class LiveExample extends StatelessWidget {
                 builder: builder,
                 padding: previewPadding,
                 fixedHeight: previewHeight,
+                debugToggles: debugToggles,
               ),
               const SizedBox(height: 12),
               code,
@@ -105,7 +115,11 @@ class LiveExample extends StatelessWidget {
                 const SizedBox(width: 16),
                 Expanded(
                   flex: 45,
-                  child: _PreviewPane(builder: builder, padding: previewPadding),
+                  child: _PreviewPane(
+                    builder: builder,
+                    padding: previewPadding,
+                    debugToggles: debugToggles,
+                  ),
                 ),
               ],
             ),
@@ -149,16 +163,49 @@ class LiveExample extends StatelessWidget {
 /// it null the rendered body is [Expanded] so the pane fills whatever height its
 /// parent gives it (the side-by-side layout, where an [IntrinsicHeight] makes
 /// that the code card's height).
-class _PreviewPane extends StatelessWidget {
+class _PreviewPane extends StatefulWidget {
   const _PreviewPane({
     required this.builder,
     required this.padding,
     this.fixedHeight,
+    this.debugToggles = false,
   });
 
   final WidgetBuilder builder;
   final EdgeInsets padding;
   final double? fixedHeight;
+
+  /// Whether the header shows the chains/blueprint debug toggles.
+  final bool debugToggles;
+
+  @override
+  State<_PreviewPane> createState() => _PreviewPaneState();
+}
+
+class _PreviewPaneState extends State<_PreviewPane> {
+  bool _showChains = false;
+  bool _showBlueprint = false;
+
+  /// Rebuilds the example's root `ConstraintLayout` with the currently toggled
+  /// debug flags, copying its children and other props over. The example
+  /// builders construct a plain `ConstraintLayout`, so this is how the toggles
+  /// reach it without every builder having to thread the flags through. A root
+  /// that is not a `ConstraintLayout` is returned untouched.
+  Widget _applyDebug(Widget rendered) {
+    if (!_showChains && !_showBlueprint) return rendered;
+    if (rendered is ConstraintLayout) {
+      return ConstraintLayout(
+        key: rendered.key,
+        textDirection: rendered.textDirection,
+        debugShowChains: _showChains,
+        debugShowBlueprint: _showBlueprint,
+        debugChainColor: rendered.debugChainColor,
+        debugBlueprintLabelStyle: rendered.debugBlueprintLabelStyle,
+        children: rendered.children,
+      );
+    }
+    return rendered;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -176,11 +223,11 @@ class _PreviewPane extends StatelessWidget {
     final border = onBg.withValues(alpha: 0.10);
 
     final render = PreviewStage(
-      padding: padding,
-      child: builder(context),
+      padding: widget.padding,
+      child: _applyDebug(widget.builder(context)),
     );
-    final body = fixedHeight != null
-        ? SizedBox(height: fixedHeight, child: render)
+    final body = widget.fixedHeight != null
+        ? SizedBox(height: widget.fixedHeight, child: render)
         : Expanded(child: render);
 
     // No divider under the header: the dotted grid of the stage reads as the
@@ -188,7 +235,17 @@ class _PreviewPane extends StatelessWidget {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _PreviewHeader(onBg: onBg, dot: brand.azure),
+        _PreviewHeader(
+          onBg: onBg,
+          dot: brand.azure,
+          accent: brand.azure,
+          showToggles: widget.debugToggles,
+          showChains: _showChains,
+          showBlueprint: _showBlueprint,
+          onToggleChains: () => setState(() => _showChains = !_showChains),
+          onToggleBlueprint: () =>
+              setState(() => _showBlueprint = !_showBlueprint),
+        ),
         body,
       ],
     );
@@ -211,20 +268,37 @@ class _PreviewPane extends StatelessWidget {
 
 /// The preview card's header row, laid out to the same height as the code
 /// card's file header: an accent dot in place of the file glyph, then a mono
-/// `preview` label.
+/// `preview` label. On the home page it also carries the chains/blueprint debug
+/// toggles on the right.
 class _PreviewHeader extends StatelessWidget {
-  const _PreviewHeader({required this.onBg, required this.dot});
+  const _PreviewHeader({
+    required this.onBg,
+    required this.dot,
+    required this.accent,
+    this.showToggles = false,
+    this.showChains = false,
+    this.showBlueprint = false,
+    this.onToggleChains,
+    this.onToggleBlueprint,
+  });
 
   final Color onBg;
   final Color dot;
+  final Color accent;
+  final bool showToggles;
+  final bool showChains;
+  final bool showBlueprint;
+  final VoidCallback? onToggleChains;
+  final VoidCallback? onToggleBlueprint;
 
   @override
   Widget build(BuildContext context) {
     return SelectionContainer.disabled(
       child: Padding(
         // Matches the code header's padding + min-height, so the two headers
-        // line up across the pair.
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        // line up across the pair. The right pad tightens when toggles show, so
+        // their border sits about as far in as the copy glyph opposite.
+        padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 28),
           child: Row(
@@ -237,6 +311,8 @@ class _PreviewHeader extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'preview',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontFamily: AppFonts.mono,
                   fontSize: 14,
@@ -246,7 +322,93 @@ class _PreviewHeader extends StatelessWidget {
                   color: onBg.withValues(alpha: 0.85),
                 ),
               ),
+              if (showToggles) ...[
+                const Spacer(),
+                _DebugToggle(
+                  label: 'chains',
+                  icon: Icons.polyline,
+                  active: showChains,
+                  onBg: onBg,
+                  accent: accent,
+                  onTap: onToggleChains!,
+                ),
+                const SizedBox(width: 6),
+                _DebugToggle(
+                  label: 'blueprint',
+                  icon: Icons.architecture,
+                  active: showBlueprint,
+                  onBg: onBg,
+                  accent: accent,
+                  onTap: onToggleBlueprint!,
+                ),
+              ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A small toggle chip in a preview header, styled for the code-theme surface
+/// (its colors derive from [onBg] and the brand [accent]). Active means the
+/// matching `ConstraintLayout` debug flag is on.
+class _DebugToggle extends StatelessWidget {
+  const _DebugToggle({
+    required this.label,
+    required this.icon,
+    required this.active,
+    required this.onBg,
+    required this.accent,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool active;
+  final Color onBg;
+  final Color accent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = active ? onBg : onBg.withValues(alpha: 0.5);
+    final bgColor = active ? accent.withValues(alpha: 0.20) : Colors.transparent;
+    final borderColor = active
+        ? accent.withValues(alpha: 0.55)
+        : onBg.withValues(alpha: 0.16);
+    return Semantics(
+      button: true,
+      toggled: active,
+      label: label,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(AppRadii.sm),
+              border: Border.all(color: borderColor),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 12, color: active ? accent : fg),
+                const SizedBox(width: 5),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: AppFonts.mono,
+                    fontSize: 11.5,
+                    height: 1.0,
+                    color: fg,
+                    fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

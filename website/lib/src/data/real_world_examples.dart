@@ -29,6 +29,7 @@ final Map<String, LiveExample> realWorldExamples = {
     previewHeight: 260,
     previewPadding: const EdgeInsets.all(24),
     maxHeight: 400,
+    debugToggles: true,
     code: r'''
 final cs = Theme.of(context).colorScheme;
 
@@ -148,6 +149,7 @@ ConstraintLayout(
     previewHeight: 300,
     previewPadding: const EdgeInsets.all(16),
     maxHeight: 400,
+    debugToggles: true,
     code: r'''
 final cs = Theme.of(context).colorScheme;
 const actions = [
@@ -244,6 +246,7 @@ ConstraintLayout(
     previewHeight: 280,
     previewPadding: const EdgeInsets.all(20),
     maxHeight: 400,
+    debugToggles: true,
     code: r'''
 final cs = Theme.of(context).colorScheme;
 
@@ -368,6 +371,7 @@ ConstraintLayout(
     previewHeight: 260,
     previewPadding: const EdgeInsets.all(16),
     maxHeight: 400,
+    debugToggles: true,
     code: r'''
 final cs = Theme.of(context).colorScheme;
 

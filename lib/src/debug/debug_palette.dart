@@ -61,6 +61,6 @@ class DebugPalette {
   /// Margin values, blueprint labels, guideline chips.
   final Color text;
 
-  /// Anchor circles and baseline pills.
+  /// The baseline mark and baseline pill.
   final Color anchor;
 }

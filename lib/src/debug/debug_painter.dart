@@ -9,8 +9,7 @@ import 'debug_palette.dart';
 import 'debug_scene.dart';
 
 // Rendering constants, lifted from Android Studio's design surface
-// (DrawConnection / DrawConnectionUtils / FancyStroke / DrawAnchor). All
-// logical pixels.
+// (DrawConnection / DrawConnectionUtils / FancyStroke). All logical pixels.
 const double _arrowSide = 6;
 const double _arrowHalfBase = 5;
 const double _smallArrowSide = 4;
@@ -23,7 +22,6 @@ const double _chainRatio = 0.6;
 const double _chainSize = 2.5;
 const double _marginTickHalf = 5;
 const double _marginOverhang = 20;
-const double _anchorRadius = 6;
 const double _marginFontSize = 12;
 const double _chipFontSize = 14;
 const double _labelFontSize = 14;
@@ -201,7 +199,7 @@ class _ScenePainter {
       _paintConnection(connection);
     }
     for (final box in scene.boxes.where((b) => !b.virtual)) {
-      _paintAnchors(box);
+      _paintBaseline(box);
     }
   }
 
@@ -275,13 +273,6 @@ class _ScenePainter {
           debugArrow(c.sourcePoint, direction,
               side: _smallArrowSide, halfBase: _smallArrowHalfBase),
           _fill,
-        );
-        _label(
-          '${c.circularRadius!.round()}px @ ${c.circularAngle!.round()}deg',
-          Offset.lerp(c.sourcePoint, c.targetPoint, 0.5)! -
-              const Offset(0, 10),
-          _marginFontSize,
-          palette.text,
         );
     }
   }
@@ -484,64 +475,32 @@ class _ScenePainter {
     if (blueprint) _paintBoxLabel(box, 1);
   }
 
-  void _paintAnchors(DebugWidgetBox box) {
-    for (final edge in const [
-      DebugEdge.left,
-      DebugEdge.right,
-      DebugEdge.top,
-      DebugEdge.bottom,
-    ]) {
-      final center = switch (edge) {
-        DebugEdge.left => Offset(box.rect.left, box.rect.center.dy),
-        DebugEdge.right => Offset(box.rect.right, box.rect.center.dy),
-        DebugEdge.top => Offset(box.rect.center.dx, box.rect.top),
-        DebugEdge.bottom => Offset(box.rect.center.dx, box.rect.bottom),
-        DebugEdge.baseline => box.rect.center,
-      };
-      final connected = box.connectedEdges.contains(edge);
-      if (blueprint) {
-        // Halo punches the frame line out around the anchor.
-        canvas.drawCircle(center, _anchorRadius * 1.2,
-            Paint()..color = palette.background);
-      }
-      if (connected) {
-        canvas.drawCircle(
-            center, _anchorRadius, Paint()..color = palette.anchor);
-      } else if (blueprint) {
-        canvas.drawCircle(
-            center, _anchorRadius, Paint()..color = palette.anchor);
-        canvas.drawCircle(center, _anchorRadius * 0.8,
-            Paint()..color = palette.background);
-      } else {
-        canvas.drawCircle(
-          center,
-          _anchorRadius - 0.6,
-          Paint()
-            ..color = palette.anchor
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.2,
-        );
-      }
+  // Android Studio paints a draggable anchor circle on every edge (solid when
+  // connected, hollow when open) because those circles are the interactive
+  // handles you drag to create constraints. This overlay is read-only, so the
+  // edge circles would be pure noise; only the baseline pill is kept, since it
+  // marks where a baseline-aligned child sits rather than being a drag target.
+  void _paintBaseline(DebugWidgetBox box) {
+    if (box.baselineY == null ||
+        !box.connectedEdges.contains(DebugEdge.baseline)) {
+      return;
     }
-    if (box.baselineY != null &&
-        box.connectedEdges.contains(DebugEdge.baseline)) {
-      final inset = box.rect.width / 5;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTRB(
-            box.rect.left + inset,
-            box.baselineY! - 3,
-            box.rect.right - inset,
-            box.baselineY! + 3,
-          ),
-          const Radius.circular(3),
+    final inset = box.rect.width / 5;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(
+          box.rect.left + inset,
+          box.baselineY! - 3,
+          box.rect.right - inset,
+          box.baselineY! + 3,
         ),
-        Paint()
-          ..color = palette.anchor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
-      );
-    }
+        const Radius.circular(3),
+      ),
+      Paint()
+        ..color = palette.anchor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
   }
 
   // ----------------------------------------------------------- helpers --

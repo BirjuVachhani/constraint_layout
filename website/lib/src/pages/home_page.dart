@@ -1,3 +1,4 @@
+import 'package:constraint_layout/constraint_layout.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -293,24 +294,8 @@ class _FeaturesOverview extends StatelessWidget {
             SizedBox(height: compact ? 24 : 36),
             LayoutBuilder(
               builder: (context, c) {
-                const gap = 16.0;
                 final cols = compact ? 1 : (c.maxWidth >= 960 ? 3 : 2);
-                final cardWidth = (c.maxWidth - gap * (cols - 1)) / cols;
-                return Wrap(
-                  spacing: gap,
-                  runSpacing: gap,
-                  children: [
-                    for (final (icon, title, desc) in _items)
-                      SizedBox(
-                        width: cols == 1 ? c.maxWidth : cardWidth,
-                        child: _FeatureCard(
-                          icon: icon,
-                          title: title,
-                          desc: desc,
-                        ),
-                      ),
-                  ],
-                );
+                return _FeatureGrid(items: _items, cols: cols);
               },
             ),
           ],
@@ -320,10 +305,133 @@ class _FeaturesOverview extends StatelessWidget {
   }
 }
 
-/// One tile in the [_FeaturesOverview] grid: an accent-tinted icon over a title
-/// and a one-line description, on the site's card surface.
-class _FeatureCard extends StatelessWidget {
-  const _FeatureCard({
+/// The feature grid, laid out as a single `ConstraintLayout` so every card in a
+/// row takes the height of the tallest card in that row.
+///
+/// Each card is two constrained siblings: a bordered *surface* whose height is a
+/// match-constraint stretched down to a per-row bottom `Barrier`, and the
+/// icon/title/description *content* on top at its natural (wrap-content) height.
+/// Only the content feeds the barrier, so the barrier settles on the tallest
+/// content in the row and every surface fills to meet it. The content never
+/// anchors to the stretched surface (that back-reference is what would make the
+/// dependency circular): both anchor independently to the shared column edges
+/// and row line, the content just inset by the card padding.
+///
+/// Columns are split by percentage `Guideline`s and the whole thing wraps its
+/// own height, so it drops in where the old `Wrap` sat with no fixed sizing.
+class _FeatureGrid extends StatelessWidget {
+  const _FeatureGrid({required this.items, required this.cols});
+
+  final List<(IconData, String, String)> items;
+  final int cols;
+
+  /// Gap between cards, and the padding from a card's edge to its content.
+  static const double _gap = 16;
+  static const double _pad = 20;
+
+  @override
+  Widget build(BuildContext context) {
+    final rowCount = (items.length + cols - 1) ~/ cols;
+
+    Symbol guide(int i) => Symbol('featGuide$i');
+    Symbol surface(int i) => Symbol('featSurface$i');
+    Symbol body(int i) => Symbol('featBody$i');
+    Symbol barrier(int r) => Symbol('featBarrier$r');
+
+    final children = <Widget>[
+      // Interior column dividers: evenly spaced percentage guidelines.
+      for (var i = 1; i < cols; i++)
+        Guideline.vertical(id: guide(i), percent: i / cols),
+    ];
+
+    for (final (i, (icon, title, desc)) in items.indexed) {
+      final col = i % cols;
+      final row = i ~/ cols;
+      final last = col == cols - 1;
+
+      // Surface edges: flush to the parent on the outer sides, inset half a gap
+      // from the interior guideline between two columns.
+      final HorizontalLink sLeft =
+          col == 0 ? .leftOf(parent) : .rightOf(guide(col), margin: _gap / 2);
+      final HorizontalLink sRight =
+          last ? .rightOf(parent) : .leftOf(guide(col + 1), margin: _gap / 2);
+      final VerticalLink sTop = row == 0
+          ? .topOf(parent)
+          : .bottomOf(barrier(row - 1), margin: _gap);
+
+      // Content edges: the same targets, inset by the padding. Anchored to the
+      // column and row (never to the surface), so there is no back-reference.
+      final HorizontalLink cLeft = col == 0
+          ? .leftOf(parent, margin: _pad)
+          : .rightOf(guide(col), margin: _gap / 2 + _pad);
+      final HorizontalLink cRight = last
+          ? .rightOf(parent, margin: _pad)
+          : .leftOf(guide(col + 1), margin: _gap / 2 + _pad);
+      final VerticalLink cTop = row == 0
+          ? .topOf(parent, margin: _pad)
+          : .bottomOf(barrier(row - 1), margin: _gap + _pad);
+
+      children.add(Constrained(
+        id: surface(i),
+        left: sLeft,
+        right: sRight,
+        top: sTop,
+        bottom: .bottomOf(barrier(row)),
+        width: .matchConstraint,
+        height: .matchConstraint,
+        child: const _FeatureCardSurface(),
+      ));
+      children.add(Constrained(
+        id: body(i),
+        left: cLeft,
+        right: cRight,
+        top: cTop,
+        width: .matchConstraint,
+        height: .wrapContent,
+        child: _FeatureCardBody(icon: icon, title: title, desc: desc),
+      ));
+    }
+
+    // One bottom barrier per row over that row's content, offset by the padding
+    // so each surface keeps an even inset below the tallest content in the row.
+    for (var row = 0; row < rowCount; row++) {
+      final start = row * cols;
+      final end = (start + cols).clamp(0, items.length);
+      children.add(Barrier(
+        id: barrier(row),
+        edge: .bottom,
+        referenced: [for (var i = start; i < end; i++) body(i)],
+        margin: _pad,
+      ));
+    }
+
+    return ConstraintLayout(children: children);
+  }
+}
+
+/// The bordered box behind a feature card. Empty on purpose: it carries only the
+/// border and stretches to the row's shared height, while [_FeatureCardBody]
+/// paints on top of it.
+class _FeatureCardSurface extends StatelessWidget {
+  const _FeatureCardSurface();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(AppRadii.lg),
+          side: BorderSide(color: context.colors.border),
+        ),
+      ),
+    );
+  }
+}
+
+/// A feature card's content: an accent-tinted icon over a title and a one-line
+/// description. Its natural height is what drives its row's barrier.
+class _FeatureCardBody extends StatelessWidget {
+  const _FeatureCardBody({
     required this.icon,
     required this.title,
     required this.desc,
@@ -337,47 +445,41 @@ class _FeatureCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final brand = context.brand;
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-        border: Border.all(color: colors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: brand.azure.withValues(alpha: 0.12),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          alignment: Alignment.center,
+          decoration: ShapeDecoration(
+            color: brand.azure.withValues(alpha: 0.12),
+            shape: RoundedSuperellipseBorder(
               borderRadius: BorderRadius.circular(AppRadii.md),
             ),
-            child: Icon(icon, size: 20, color: brand.azure),
           ),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: TextStyle(
-              color: colors.foreground,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
-            ),
+          child: Icon(icon, size: 20, color: brand.azure),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          title,
+          style: TextStyle(
+            color: colors.foreground,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.2,
           ),
-          const SizedBox(height: 8),
-          Text(
-            desc,
-            style: TextStyle(
-              color: colors.mutedForeground,
-              fontSize: 14,
-              height: 1.5,
-            ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          desc,
+          style: TextStyle(
+            color: colors.mutedForeground,
+            fontSize: 14,
+            height: 1.5,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -584,9 +686,9 @@ class _InteractiveFeature extends StatelessWidget {
           'like any other. Flip B between visible, invisible, and gone and watch '
           'C respond: invisible holds the space, gone collapses it and C slides '
           'in on its goneMargin.',
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: const VisibilityToggleDemo(height: 200),
+      child: const VisibilityToggleDemo(
+        sideBySide: true,
+        maxHeight: _kHomeCodeCap,
       ),
     );
   }
@@ -735,7 +837,10 @@ class _EngineCard extends StatelessWidget {
               ),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: colors.surfaceInset,
                   borderRadius: BorderRadius.circular(AppRadii.pill),

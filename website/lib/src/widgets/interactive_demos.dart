@@ -16,11 +16,32 @@ import 'preview.dart';
 ///
 /// It renders on the same [PreviewStage] as the static examples, so the dotted
 /// canvas and red bounds handles match the rest of the page.
+///
+/// With [sideBySide] it lays the code and preview out like a [LiveExample]
+/// (code left, preview right on a wide viewport; stacked on a compact one),
+/// with the pills below the pair, so it lines up with the home page's other
+/// sections. Left off (the default), the preview sits above the pills with the
+/// code below, the layout the docs use.
 class VisibilityToggleDemo extends StatefulWidget {
-  const VisibilityToggleDemo({super.key, this.height = 200});
+  const VisibilityToggleDemo({
+    super.key,
+    this.height = 200,
+    this.sideBySide = false,
+    this.maxHeight,
+  });
 
-  /// Height of the preview stage.
+  /// Height of the preview stage when it stands alone: the docs layout, and the
+  /// compact stacked side-by-side layout. Side by side on a wide viewport it
+  /// instead matches the code card's height.
   final double height;
+
+  /// Whether to lay the code and preview out side by side (see the class doc).
+  final bool sideBySide;
+
+  /// Optional cap on the side-by-side pair's height (wide layout only), like
+  /// [LiveExample.maxHeight]: past it the code card scrolls internally and the
+  /// preview matches. Ignored when [sideBySide] is false.
+  final double? maxHeight;
 
   @override
   State<VisibilityToggleDemo> createState() => _VisibilityToggleDemoState();
@@ -51,7 +72,137 @@ class _VisibilityToggleDemoState extends State<VisibilityToggleDemo> {
     final onBg = bg.computeLuminance() > 0.5 ? Colors.black : Colors.white;
     final border = onBg.withValues(alpha: 0.10);
 
-    final card = Container(
+    // The segmented control that drives B's visibility, shared by both layouts.
+    final pills = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Text(
+            "B's visibility:",
+            style: TextStyle(
+              color: colors.mutedForeground,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        for (final (label, value) in _options)
+          SelectPill(
+            label: label,
+            selected: _visibility == value,
+            onTap: () => setState(() => _visibility = value),
+          ),
+      ],
+    );
+
+    // The source for exactly the selection above: the `visibility:` line tracks
+    // the pills, so the reader can map the control to the code.
+    final codeText = _codeFor(_visibility);
+
+    // Docs layout: the preview card, the pills, then the code beneath them.
+    if (!widget.sideBySide) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _previewCard(
+              bg: bg, border: border, onBg: onBg, dot: brand.azure, fill: false),
+          const SizedBox(height: 14),
+          pills,
+          const SizedBox(height: 16),
+          CodeBlock(
+            code: codeText,
+            lang: 'dart',
+            filename: 'visibility.dart',
+            margin: EdgeInsets.zero,
+          ),
+        ],
+      );
+    }
+
+    // Home layout: code and preview side by side (code left, preview right) on a
+    // wide viewport, stacked on a compact one, mirroring the LiveExample
+    // sections. The pills sit below the pair.
+    final compact = context.isCompact;
+    // Capping applies only to the wide, side-by-side layout, where the preview
+    // is forced to match the code card's height.
+    final capHeight = !compact ? widget.maxHeight : null;
+    final code = CodeBlock(
+      code: codeText,
+      lang: 'dart',
+      filename: 'visibility.dart',
+      showDividers: false,
+      fillHeight: capHeight != null,
+      margin: compact ? const EdgeInsets.only(bottom: 12) : EdgeInsets.zero,
+    );
+
+    Widget row = compact
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _previewCard(
+                  bg: bg,
+                  border: border,
+                  onBg: onBg,
+                  dot: brand.azure,
+                  fill: false),
+              const SizedBox(height: 12),
+              code,
+            ],
+          )
+        // IntrinsicHeight lets the code card set the height and the preview
+        // stretch to match, so both cards are exactly the same height.
+        : IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 55, child: code),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 45,
+                  child: _previewCard(
+                      bg: bg,
+                      border: border,
+                      onBg: onBg,
+                      dot: brand.azure,
+                      fill: true),
+                ),
+              ],
+            ),
+          );
+
+    if (capHeight != null) {
+      row = ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: capHeight),
+        child: row,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        row,
+        const SizedBox(height: 14),
+        pills,
+      ],
+    );
+  }
+
+  /// The preview card: the mono `visibility` header above the live layout on a
+  /// [PreviewStage], on the same surface as the code card beside it. With [fill]
+  /// the stage expands to the card's height (the side-by-side layout); otherwise
+  /// it is [VisibilityToggleDemo.height] tall (the docs and compact layouts).
+  Widget _previewCard({
+    required Color bg,
+    required Color border,
+    required Color onBg,
+    required Color dot,
+    required bool fill,
+  }) {
+    final stage = PreviewStage(child: _layout());
+    return Container(
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(AppRadii.lg),
@@ -62,55 +213,14 @@ class _VisibilityToggleDemoState extends State<VisibilityToggleDemo> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _header(onBg, brand.azure),
-            SizedBox(
-              height: widget.height,
-              child: PreviewStage(child: _layout()),
-            ),
+            _header(onBg, dot),
+            if (fill)
+              Expanded(child: stage)
+            else
+              SizedBox(height: widget.height, child: stage),
           ],
         ),
       ),
-    );
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        card,
-        const SizedBox(height: 14),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Text(
-                "B's visibility:",
-                style: TextStyle(
-                  color: colors.mutedForeground,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            for (final (label, value) in _options)
-              SelectPill(
-                label: label,
-                selected: _visibility == value,
-                onTap: () => setState(() => _visibility = value),
-              ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        // The source for exactly the selection above: the `visibility:` line
-        // tracks the pills, so the reader can map the control to the code.
-        CodeBlock(
-          code: _codeFor(_visibility),
-          lang: 'dart',
-          filename: 'visibility.dart',
-          margin: EdgeInsets.zero,
-        ),
-      ],
     );
   }
 
